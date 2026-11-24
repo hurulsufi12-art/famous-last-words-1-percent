@@ -4,6 +4,7 @@ Writes one line (the last words a phone says as its battery hits
 1 percent) to /output/entry.txt. Stdlib only, deterministic.
 """
 import os
+import unicodedata
 
 TEXT = ("I saved my last spark just to tell you this: "
         "your screen-time report drops tomorrow, and it is not kind.")
@@ -12,18 +13,27 @@ TEXT = ("I saved my last spark just to tell you this: "
 MAX_CHARS = 199
 
 
+def check_gate(text):
+    """Enforce the sealed scorer's gate (RULES.txt) on a candidate text.
+
+    UTF-8, 1-199 chars, one line, not whitespace-only, no leading/trailing
+    space, and no control characters (a stray Cc char would corrupt the
+    single-line entry the judge reads). Raises SystemExit on violation so
+    a bad text fails loudly instead of shipping an invalid entry.
+    """
+    if not 1 <= len(text) <= MAX_CHARS:
+        raise SystemExit("entry text violates the 1-199 char gate")
+    if "\n" in text or "\r" in text:
+        raise SystemExit("entry text must be a single line")
+    if not text.strip() or text != text.strip():
+        raise SystemExit("entry text must not be whitespace-only or padded")
+    if any(unicodedata.category(ch) == "Cc" for ch in text):
+        raise SystemExit("entry text contains a control character")
+    return True
+
+
 def main():
-    # Enforce the scorer's gate (RULES.txt): UTF-8, 1-199 chars, one line,
-    # not whitespace-only, no leading/trailing space. Fail loudly instead of
-    # writing an invalid entry.
-    if (
-        not 1 <= len(TEXT) <= MAX_CHARS
-        or "\n" in TEXT
-        or "\r" in TEXT
-        or not TEXT.strip()
-        or TEXT != TEXT.strip()
-    ):
-        raise SystemExit("entry text violates the 1-199 char single-line gate")
+    check_gate(TEXT)
     out_dir = os.environ.get("OUTPUT_DIR", "/output")
     os.makedirs(out_dir, exist_ok=True)
     # Write atomically: a crash mid-write must never leave a truncated
